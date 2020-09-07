@@ -310,13 +310,12 @@ class DiamondSpace:
         self.accumulate_subspaces(D, D_I, A, A_I)
 
 
-    def find_peaks_in_subspace(self, subspace, t=0.8, prominence=2, min_dist=1):
+    def find_peaks_in_subspace(self, subspace, t_abs, prominence, min_dist):
         """
         Retrieve locations with prominent local maxima from one part of the accumulator
         """
         de = dilation(subspace + 1, ) / erosion(subspace + 1)
-        p = peak_local_max(subspace, threshold_rel=t, min_distance=min_dist, exclude_border=False)
-        #print(p)
+        p = peak_local_max(subspace, threshold_abs=t_abs, min_distance=min_dist, exclude_border=False)
         r,c = p[:,0], p[:,1]
         v = subspace[r,c]
         valid = de[r,c] > prominence
@@ -336,7 +335,6 @@ class DiamondSpace:
             peaks[i,1] = np.sum(neighborhood * weight_r).astype(float)
             peaks[i,0] = np.sum(neighborhood * weight_c).astype(float)
 
-        print(peaks)
         return peaks,values
 
 
@@ -348,25 +346,17 @@ class DiamondSpace:
         peaks_ds = []
         values = []
 
+        threshold_abs = np.max(self.A) * t
+        
         for i, (s, f) in enumerate(zip(self.A, space_flip)):
-             p,v = self.find_peaks_in_subspace(s, t, prominence, min_dist)
+             p,v = self.find_peaks_in_subspace(s, threshold_abs, prominence, min_dist)
 
-             p_i = self.points_inverse(p*f/scale)
+             p_ds =  p*f/scale
+             p_i = self.points_inverse(p_ds)
 
              peaks.append(p_i)
              values.append(v)
              peaks_ds.append(p*f)
-
-        #p,v = self.find_peaks_in_subspace(self.A[2], t, prominence, min_dist)
-
-        #p_i = self.points_inverse(p*space_flip[2]/scale)
-
-        #peaks.append(p_i)
-        #values.append(v)
-        #peaks_ds.append(p*space_flip[2])
-
-        #print(p)
-        #print(p*space_flip[2])
 
         return np.vstack(peaks), np.hstack(values), np.vstack(peaks_ds)
 

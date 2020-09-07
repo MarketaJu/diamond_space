@@ -105,9 +105,9 @@ scale = (DS.size - 1) / DS.d
 
 A = DS.attach_spaces()
 _,ax = plt.subplots(1, figsize=(5,5))
-ax.imshow(A, cmap="inferno", extent = (-d+0.5/scale,d-0.5/scale,d-0.5/scale,-d+0.5/scale))
-ax.set(title="Accumulator", xticks=np.linspace(-d+1,d-1,5), yticks=np.linspace(-d+1,d-1,5))
-ax.plot(p_ds[:,0]/scale, p_ds[:,1]/scale, "r+")
+ax.imshow(A, cmap="inferno", extent = (-DS.size+0.5,DS.size-0.5,DS.size-0.5,-DS.size+0.5)/scale)
+ax.set(title="Accumulator", xticks=np.linspace(-DS.size+1,DS.size-1,5)/scale, yticks=np.linspace(-DS.size+1,DS.size-1,5)/scale)
+ax.plot(p_ds[:,0], p_ds[:,1], "r+")
 
 ax.invert_yaxis()
 plt.tight_layout()
