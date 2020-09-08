@@ -65,8 +65,9 @@ def _generate_lines(d, d_i, a, a_i):
             yield d[i, :], a[i, 1, :], True
 
 
-def _accumulate_line(accumulator, end_points, d_flag, weight=1):
+def _accumulate_line(accumulator, end_points, d_flag, weight):
     """ Accumulate one line segment into accumulator """
+
     space_size = accumulator.shape[0]
     x0, y0, x1, y1 = end_points
     dx = x0 - x1
@@ -284,7 +285,7 @@ class DiamondSpace:
         return D, D_I, A, A_I
 
 
-    def accumulate_subspaces(self, D, D_I, A, A_I):
+    def accumulate_subspaces(self, D, D_I, A, A_I, weights):
         """ Accumulate all line segments """
 
         self.clear()
@@ -297,17 +298,21 @@ class DiamondSpace:
 
         for i, data in enumerate(_generate_subspaces(D_s, D_I, A_s, A_I)):
             d, d_i, a, a_i = data
-            for x, y, d_flag in _generate_lines(d, d_i, a, a_i):
-                _accumulate_line(self.A[i],[x[0], x[1], y[0], y[1]], d_flag)
+            for j, data_lines in enumerate(_generate_lines(d, d_i, a, a_i)):
+                x, y, d_flag = data_lines
+                _accumulate_line(self.A[i],[x[0], x[1], y[0], y[1]], d_flag, weights[j])
 
-    def insert(self, l, weight=None):
+    def insert(self, lines, weights=None):
         """
-        Insert and accumulate lines l (in homogeneous coordinate) to diamond space
+        Insert and accumulate lines 'lines' (in homogeneous coordinate) to diamond space
         """
-        _validate_lines(l)
-        D, D_I, A, A_I = self.get_intersection(l)
+        _validate_lines(lines)
+        D, D_I, A, A_I = self.get_intersection(lines)
 
-        self.accumulate_subspaces(D, D_I, A, A_I)
+        if weights is None:
+            weights = np.ones(lines.shape[0])
+
+        self.accumulate_subspaces(D, D_I, A, A_I, weights)
 
 
     def find_peaks_in_subspace(self, subspace, t_abs, prominence, min_dist):
