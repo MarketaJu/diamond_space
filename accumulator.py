@@ -2,6 +2,7 @@
 Diamond space transformation for vanishing point detection
 This package implements the method from
     Dubska et al, Real Projective Plane Mapping for Detection of Orthogonal Vanishing Points, BMVC 2013
+
 Module
 ------
 The module provides a high-level function for vanishing point detection in image
@@ -11,9 +12,9 @@ and also low-level functions for
 that can be used to construct a custom transform of user-defined lines.
 See also
 --------
-* diamondspace.accumulate
+* diamondspace.insert
 * diamondspace.find_peaks
-* diamondspace.line_parameters
+
 References
 ----------
 [1] Dubska et al, Real Projective Plane Mapping for Detection of Orthogonal Vanishing Points, BMVC 2013
@@ -64,11 +65,10 @@ def _generate_lines(d, d_i, a, a_i):
         elif d_i[i] and a_i[i, 1]:
             yield d[i, :], a[i, 1, :], True
 
-
 def _accumulate_line(accumulator, end_points, d_flag, weight):
     """ Accumulate one line segment into accumulator """
 
-    space_size = accumulator.shape[0]
+    size = accumulator.shape[0]
     x0, y0, x1, y1 = end_points
     dx = x0 - x1
     dy = y0 - y1
@@ -85,7 +85,7 @@ def _accumulate_line(accumulator, end_points, d_flag, weight):
         else:
             if x1 < x0:
                 x0, y0, x1, y1 = x1, y1, x0, y0
-            steps = space_size
+            steps = size
             X = np.arange(0, steps)
             dif_y = (y0 - y1) / (x0 - x1)
             Y = np.arange(0, steps) * dif_y + y0
@@ -98,7 +98,7 @@ def _accumulate_line(accumulator, end_points, d_flag, weight):
         else:
             if y1 < y0:
                 x0, y0, x1, y1 = x1, y1, x0, y0
-            steps = space_size
+            steps = size
             Y = np.arange(0, steps)
             dif_x = (x0 - x1) / (y0 - y1)
             X = np.arange(0, steps) * dif_x + x0
@@ -106,56 +106,11 @@ def _accumulate_line(accumulator, end_points, d_flag, weight):
     X = np.round(X).astype(np.int32)
     Y = np.round(Y).astype(np.int32)
 
-    iX = np.logical_and(X >= 0, X <= space_size)
-    iY = np.logical_and(Y >= 0, Y <= space_size)
+    iX = np.logical_and(X >= 0, X <= size)
+    iY = np.logical_and(Y >= 0, Y <= size)
     iXY = np.logical_and(iX, iY)
 
     accumulator[Y[iXY], X[iXY]] += weight
-
-def _relevant_intersections(points, d):
-    """ Check if intersections lie in diamond space """
-    # normalize points - be careful with ideal points
-    regular_points = np.copy(points[:, :, 2])
-    regular_points[abs(regular_points) < 0.0001] = 1
-
-    points = points / np.repeat(regular_points[:, :, np.newaxis], 3, axis=2)
-
-    # check x coordinate
-    X = np.logical_and(points[:, :, 0] >= 0, points[:, :, 0] <= d)
-
-    # check y coordinate
-    Y = np.logical_and(points[:, :, 1] >= 0, points[:, :, 1] <= d)
-
-    return points, np.logical_and(np.logical_and(X, Y), abs(points[:, :, 2]) > 0.0001)
-
-def _line_intersections(l, d):
-    """ Return all intersections of projected lines with space border and axes """
-    # intersections with diagonal in ST, SS, TS, TT spaces
-    diagonals = np.array([[-d ** 2, 0, d, -d ** 2, 0, -d, d ** 2, 0, d,
-                           d ** 2, 0, -d],
-                          [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                          [0, d, 1, 0, d, 1, 0, -d, 1, 0, -d, 1]])
-
-    # flip matrix for ST, SS, TS, TT spaces
-    f = np.array([[-1, 1, 1, 1, 1, 1, 1, -1, 1, -1, -1, 1],
-                  [-1, 1, 1, 1, 1, 1, 1, -1, 1, -1, -1, 1],
-                  [-1, 1, 1, 1, 1, 1, 1, -1, 1, -1, -1, 1]])
-
-    p_diagonals = np.matmul(l, diagonals * f)
-
-    # intersections with -X,X,-Y,Y axes
-    axes = np.array([[0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1],
-                     [d ** 2, 0, -d, d ** 2, 0, d, 0, d, -1, 0, d, 1],
-                     [0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0]])
-
-    # flip matrix for -X,X,-Y,Y spaces
-    f = np.array([[-1, 1, 1, 1, 1, 1, 1, -1, 1, 1, 1, 1],
-                  [-1, 1, 1, 1, 1, 1, 1, -1, 1, 1, 1, 1],
-                  [-1, 1, 1, 1, 1, 1, 1, -1, 1, 1, 1, 1]])
-
-    p_axes = np.matmul(l, axes * f)
-
-    return p_diagonals.reshape(-1, 4, 3), p_axes.reshape(-1, 4, 3)
 
 class DiamondSpace:
     """
@@ -167,6 +122,7 @@ class DiamondSpace:
         # Init accumulator
         self.d = d
         self.size = size
+        self.scale = (self.size - 1) / self.d
         self.A = []
         for i in range(4):
             self.A.append(np.zeros([self.size, self.size]))
@@ -177,7 +133,7 @@ class DiamondSpace:
 
     def lines_to_subspaces(self, l):
         """
-        Transform lines l to the diamond space and for each return 4 lines in diamond spaces (one for each subspace).
+        Transform lines l to the cascaded hough spaces (ST, SS, TS and TT space) using parallel coordinate.
         Input
         -----
         l : ndarray
@@ -185,23 +141,24 @@ class DiamondSpace:
         Output
         ------
         l_transform : ndarray
-            4x3xN array with four lines (transformation to ST, SS, TS and TT space) for each input line
+            Nx4x3 array with transformation coordinates to ST, SS, TS and TT space for each input line
         """
         _validate_lines(l)
+        d = self.d
 
         # ST, SS, TS, TT projection matrices
-        m = np.array([[0, -self.d, 0, 0, -self.d, 0, 0, -self.d, 0, 0, -self.d, 0],
-                      [self.d, -self.d, self.d ** 2, -self.d, -self.d, self.d ** 2, -self.d, self.d,
-                       self.d ** 2, self.d, self.d, self.d ** 2],
-                      [-1, 0, 0, -1, 0, 0, -1, 0, 0, -1, 0, 0]])
+        m_ST = np.array([[0, -1, 0], [1, -1, d], [-1/d, 0, 0]])
+        m_SS = np.array([[0, -1, 0], [-1, -1, d],[-1/d, 0, 0]])
+        m_TS = np.array([[0, -1, 0], [-1, 1, d], [-1/d, 0, 0]])
+        m_TT = np.array([[0, -1, 0], [1, 1, d],  [-1/d, 0, 0]])
 
-        l_transform = np.matmul(l, m)
+        l_projections = np.stack([l @ M_i for M_i in (m_ST, m_SS, m_TS, m_TT)], axis=1)
 
-        return l_transform.reshape(-1, 4, 3)
+        return l_projections
 
     def points_to_subspaces(self, p):
         """
-        Transform points p to the diamond space and for each return 4 points in diamond spaces (one for each subspace).
+        Transform points p to the cascaded hough spaces (ST, SS, TS and TT space) using parallel coordinate.
         Input
         -----
         p : ndarray
@@ -209,78 +166,137 @@ class DiamondSpace:
         Output
         ------
         p_transform : ndarray
-           4x3xN array with four points (transformation to ST, SS, TS and TT space) for each input point
+            Nx4x3 array with transformation coordinates to ST, SS, TS and TT space for each input point
         """
         _validate_points(p)
+        d = self.d
 
         # ST, SS, TS, TT projection matrices
-        m = np.array([[0, -self.d, -1, 0, -self.d, -1, 0, -self.d, 1, 0, -self.d, 1],
-                      [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
-                      [-self.d ** 2, 0, self.d, -self.d ** 2, 0, -self.d, -self.d ** 2, 0, -self.d, -self.d ** 2,
-                       0, self.d]])
+        m_ST = np.array([[0, -1, -1/d], [0, 0, 1/d], [-d, 0, 1]])
+        m_SS = np.array([[0, -1, -1/d], [0, 0, 1/d], [-d, 0, -1]])
+        m_TS = np.array([[0, -1, 1/d],  [0, 0, 1/d], [-d, 0, -1]])
+        m_TT = np.array([[0, -1, 1/d],  [0, 0, 1/d], [-d, 0, 1]])
 
-        p_transform = np.matmul(p, m)
+        p_projections = np.stack([p @ M_i for M_i in (m_ST, m_SS, m_TS, m_TT)], axis=1)
 
-        return p_transform.reshape(-1, 4, 3)
+        return p_projections
 
-    def points_transform(self, point):
+    def points_to_ds(self, p):
         """
         Transform point p to the diamond space
+        Input
         -----
         p : Nx3 array with point in homogeneous coordinates
         Output
         ------
         p_transform :Nx3 array with point coordinates in Diamond space
         """
-        s0 = 1
-        s1 = 1
+        #
+        # s0 = 1
+        # s1 = 1
+        #
+        # if point[0] < 0:
+        #     s0 = -1
+        #
+        # if point[1] < 0:
+        #     s1 = -1
+        #
+        # m = np.array([[0, -self.d, s0 * s1],
+        #               [0, 0, 1],
+        #               [-self.d ** 2, 0, self.d * s1]])
+        #
+        # p = np.matmul(point, m)
+        # if p[2] != 0:
+        #     return p / p[2]
+        # else:
+        #     return p
 
-        if point[0] < 0:
-            s0 = -1
+        _validate_points(p)
+        d = self.d
 
-        if point[1] < 0:
-            s1 = -1
+        p_transform = np.ndarray(p.shape)
 
-        m = np.array([[0, -self.d, s0 * s1],
-                      [0, 0, 1],
-                      [-self.d ** 2, 0, self.d * s1]])
+        s0 = (p[:, 0] >= 0) * 1 + (p[:, 0] < 0) * -1
+        s1 = (p[:, 1] >= 0) * 1 + (p[:, 1] < 0) * -1
 
-        p = np.matmul(point, m)
-        if p[2] != 0:
-            return p / p[2]
-        else:
-            return p
+        p_transform[:, 0] = -p[:,2]*d
+        p_transform[:, 1] = -p[:,0]
+        p_transform[:, 2] = (s0*s1*p[:,0] + p[:,1])/d + p[:,2]*s1
 
-    def points_inverse(self, p):
+        return p_transform/p_transform[:,2].reshape(-1,1)
+
+    def points_from_ds(self, p):
         """
-        Transform point p from the diamond space to original coordinate system
+        Transform points p from the diamond space to original coordinate system
         -----
-        p : Nx3 array with point in homogeneous coordinates in Diamond space
+        p : Nx2 array with point in homogeneous coordinates in Diamond space
         Output
         ------
         p_inverse :Nx3 array with coordinates of the point in the original coordinate system
         """
         _validate_points2D(p)
 
-        x = p[:,1]*self.d
-        y = self.d*(np.abs(p[:,0]) + np.abs(p[:,1]) - self.d)
-        w = p[:,0]
+        d = self.d
 
-        p_i = np.vstack((x,y,w)).T
+        p_inverse = np.ndarray([p.shape[0],3])
 
-        p_regular = w != 0
-        p_i[p_regular, :] = p_i[p_regular, :]/p_i[p_regular, 2].reshape(-1, 1)
+        p_inverse[:,0] = p[:,1]
+        p_inverse[:,1] = np.abs(p[:,0]) + np.abs(p[:,1]) - d
+        p_inverse[:,2] = p[:,0]/d
 
-        return p_i
+        eps = 1e-12
+        regular_points = ~np.isclose(p_inverse[:, 2:], 0, atol=eps)
+
+        return np.divide(p_inverse, p_inverse[:, :, 2:], where=regular_points)
+
+    def line_intersections(self, lines):
+        """ Return all intersections of projected lines with space border and axes  used in rasterization"""
+        d = self.d
+
+        # intersections with diagonal in flipped ST, SS, TS, TT spaces (all subspaces are flipped to positive quadrant)
+        m_ST = np.array([[d, 0, 1],[0, 0, 0],[0, 1, 1/d]])
+        m_SS = np.array([[-d, 0, -1], [0, 0, 0], [0, 1, 1 / d]])
+        m_TS = np.array([[d, 0, 1],[0, 0, 0],[0, 1, 1/d]])
+        m_TT = np.array([[-d, 0, -1],[0, 0, 0],[0, 1, 1/d]])
+
+        p_diagonals = np.stack([lines @ M_i for M_i in (m_ST, m_SS, m_TS, m_TT)], axis=1)
+
+        # intersections with -X,X,-Y,Y axes (all subspaces are flipped to positive quadrant)
+        m_nX = np.array([[0, 0, 0],[-d, 0, -1],[0, 0, 1/d]])
+        m_pX = np.array([[0, 0, 0],[d, 0, 1],[0, 0, 1/d]])
+        m_nY = np.array([[0, 0, 1],[0, -d, -1],[0, 0, 0]])
+        m_pY = np.array([[0, 0, 1],[0, d, 1],[0, 0, 0]])
+
+        p_axes = np.stack([lines @ M_i for M_i in (m_nX, m_pX, m_nY, m_pY)], axis=1)
+
+        return p_diagonals, p_axes
+
+    def relevant_intersections(self, points):
+        """ Check if intersections lie in diamond space """
+        # normalize points - be careful with ideal points
+
+        eps = 1e-12
+
+        regular_points = ~np.isclose(points[:,:,2:],0,atol=eps)
+
+        points = np.divide(points,points[:,:,2:], where=regular_points)
+
+        # check x coordinate
+        X = np.logical_and(points[:, :, 0] >= 0 - eps, points[:, :, 0] <= self.d + eps)
+
+        # check y coordinate
+        Y = np.logical_and(points[:, :, 1] >= 0 - eps, points[:, :, 1] <= self.d + eps)
+
+        return points,  np.logical_and(np.logical_and(X, Y), np.logical_and(np.logical_and(X, Y), regular_points[:,:,0]))
 
     def get_intersection(self,l):
         """ Return relevant intersections of projected lines with space border and axes """
 
-        l = l / np.linalg.norm(l, axis=1).reshape(-1, 1)
+        l /= np.linalg.norm(l, keepdims=True, axis=1)
 
-        D, A = _line_intersections(l, self.d)
-        D, D_I = _relevant_intersections(D, self.d + 0.0001)
-        A, A_I = _relevant_intersections(A, self.d + 0.0001)
+        D, A = self.line_intersections(l)
+        D, D_I = self.relevant_intersections(D)
+        A, A_I = self.relevant_intersections(A)
 
         return D, D_I, A, A_I
 
@@ -288,13 +304,10 @@ class DiamondSpace:
     def accumulate_subspaces(self, D, D_I, A, A_I, weights):
         """ Accumulate all line segments """
 
-        self.clear()
-
-        scale = (self.size - 1) / self.d
         D_s = D
-        D_s[:, :, 0:2] = D_s[:, :, 0:2] * scale
+        D_s[:, :, 0:2] = D_s[:, :, 0:2] * self.scale
         A_s = A
-        A_s[:, :, 0:2] = A_s[:, :, 0:2] * scale
+        A_s[:, :, 0:2] = A_s[:, :, 0:2] * self.scale
 
         for i, data in enumerate(_generate_subspaces(D_s, D_I, A_s, A_I)):
             d, d_i, a, a_i = data
@@ -307,6 +320,7 @@ class DiamondSpace:
         Insert and accumulate lines 'lines' (in homogeneous coordinate) to diamond space
         """
         _validate_lines(lines)
+        lines = lines.astype(np.double)
         D, D_I, A, A_I = self.get_intersection(lines)
 
         if weights is None:
@@ -345,7 +359,6 @@ class DiamondSpace:
 
     def find_peaks(self, t=0.8, prominence=2, min_dist=1):
         space_flip = [(-1, 1), (1, 1), (1, -1), (-1, -1)]
-        scale = (self.size - 1) / self.d
 
         peaks = []
         peaks_ds = []
@@ -356,7 +369,7 @@ class DiamondSpace:
         for i, (s, f) in enumerate(zip(self.A, space_flip)):
              p,v = self.find_peaks_in_subspace(s, threshold_abs, prominence, min_dist)
 
-             p_ds =  p*f/scale
+             p_ds =  p*f/self.scale
              p_i = self.points_inverse(p_ds)
 
              peaks.append(p_i)
@@ -368,8 +381,8 @@ class DiamondSpace:
     def attach_spaces(self):
         accumulator = np.zeros([self.size * 2 - 1, self.size * 2 - 1])
         accumulator[0: self.size, 0: self.size] = np.flipud(np.fliplr(self.A[3]))
-        accumulator[0: self.size, self.size-1:] = np.flipud(self.A[2])
-        accumulator[self.size-1:, self.size-1:] = self.A[1]
-        accumulator[self.size-1:, 0: self.size] = np.fliplr(self.A[0])
+        accumulator[0: self.size, self.size-1:] = np.maximum(np.flipud(self.A[2]), accumulator[0: self.size, self.size-1:])
+        accumulator[self.size-1:, self.size-1:] = np.maximum(self.A[1], accumulator[self.size-1:, self.size-1:])
+        accumulator[self.size-1:, 0: self.size] = np.maximum(np.fliplr(self.A[0]),accumulator[self.size-1:, 0: self.size])
 
         return accumulator
