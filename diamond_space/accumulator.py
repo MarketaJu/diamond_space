@@ -191,30 +191,11 @@ class DiamondSpace:
         ------
         p_transform :Nx3 array with point coordinates in Diamond space
         """
-        #
-        # s0 = 1
-        # s1 = 1
-        #
-        # if point[0] < 0:
-        #     s0 = -1
-        #
-        # if point[1] < 0:
-        #     s1 = -1
-        #
-        # m = np.array([[0, -self.d, s0 * s1],
-        #               [0, 0, 1],
-        #               [-self.d ** 2, 0, self.d * s1]])
-        #
-        # p = np.matmul(point, m)
-        # if p[2] != 0:
-        #     return p / p[2]
-        # else:
-        #     return p
 
         _validate_points(p)
         d = self.d
 
-        p_transform = np.ndarray(p.shape)
+        p_transform = np.empty(p.shape, np.float64)
 
         s0 = (p[:, 0] >= 0) * 1 + (p[:, 0] < 0) * -1
         s1 = (p[:, 1] >= 0) * 1 + (p[:, 1] < 0) * -1
@@ -223,31 +204,33 @@ class DiamondSpace:
         p_transform[:, 1] = -p[:,0]
         p_transform[:, 2] = (s0*s1*p[:,0] + p[:,1])/d + p[:,2]*s1
 
-        return p_transform/p_transform[:,2].reshape(-1,1)
+        return p_transform[:,0:2]/p_transform[:,2].reshape(-1,1)
 
     def points_from_ds(self, p):
         """
         Transform points p from the diamond space to original coordinate system
         -----
-        p : Nx2 array with point in homogeneous coordinates in Diamond space
+        p : Nx2 array with point in coordinates of the Diamond space
         Output
         ------
-        p_inverse :Nx3 array with coordinates of the point in the original coordinate system
+        p_inverse :Nx3 array with homogeneous coordinates of the point in the original coordinate system
         """
         _validate_points2D(p)
 
         d = self.d
 
-        p_inverse = np.ndarray([p.shape[0],3])
+        p_inverse = np.empty([p.shape[0],3], np.float64)
 
         p_inverse[:,0] = p[:,1]
         p_inverse[:,1] = np.abs(p[:,0]) + np.abs(p[:,1]) - d
         p_inverse[:,2] = p[:,0]/d
 
         eps = 1e-12
-        regular_points = ~np.isclose(p_inverse[:, 2:], 0, atol=eps)
 
-        return np.divide(p_inverse, p_inverse[:, :, 2:], where=regular_points)
+        regular_points = ~np.isclose(p_inverse[:,2:], 0, atol=eps)
+        p_inverse = np.divide(p_inverse, p_inverse[:, 2:], where=regular_points, out=p_inverse)
+
+        return p_inverse
 
     def line_intersections(self, lines):
         """ Return all intersections of projected lines with space border and axes  used in rasterization"""
@@ -278,8 +261,7 @@ class DiamondSpace:
         eps = 1e-12
 
         regular_points = ~np.isclose(points[:,:,2:],0,atol=eps)
-
-        points = np.divide(points,points[:,:,2:], where=regular_points)
+        points = np.divide(points,points[:,:,2:], where=regular_points, out=points)
 
         # check x coordinate
         X = np.logical_and(points[:, :, 0] >= 0 - eps, points[:, :, 0] <= self.d + eps)
@@ -339,7 +321,7 @@ class DiamondSpace:
         v = subspace[r,c]
         valid = de[r,c] > prominence
 
-        peaks = np.ndarray([np.sum(valid),2])
+        peaks = np.empty([np.sum(valid),2], np.float64)
         values = v[valid]
 
         # Subpixel correction of the peak
@@ -370,7 +352,7 @@ class DiamondSpace:
              p,v = self.find_peaks_in_subspace(s, threshold_abs, prominence, min_dist)
 
              p_ds =  p*f/self.scale
-             p_i = self.points_inverse(p_ds)
+             p_i = self.points_from_ds(p_ds)
 
              peaks.append(p_i)
              values.append(v)
