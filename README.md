@@ -27,7 +27,7 @@ To install [PyPI](https://pypi.org/project/diamond-space/) package:
 pip install diamond_space
 ```
 
-Or donwload an archive from [Releases](https://github.com/MarketaJu/diamond_space/releases) and install it manually.
+Or download an archive from [Releases](https://github.com/MarketaJu/diamond_space/releases) and install it manually.
 
 # Examples
 
