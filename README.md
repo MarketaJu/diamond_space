@@ -33,6 +33,6 @@ Or download an archive from [Releases](https://github.com/MarketaJu/diamond_spac
 
 We have a few examples in Colab notebooks where you can mess around with the package.
 
-* [Synthetic lines intersecting in one point](https://colab.research.google.com/drive/1Ms7aHDozJEok2ytWuPD63i_hdUrT5KG_?usp=sharing)
+* [Synthetic lines intersecting in one point](https://colab.research.google.com/drive/17QerSgbe3mG30Ge18skzo8RNYPv24FbQ?usp=sharing)
 * [Point projection from Cartesian coordinate system to Diamond space](https://colab.research.google.com/drive/1pN8ro2GGB13zqvGDDAz_g7Sey0Kvh8Ih?usp=sharing)
-* [Vanishing point detection in image](https://colab.research.google.com/drive/1ISOp7mSgSoIXbPLUlED3FL9vdSZLPeWf?usp=sharing) 
+* [Vanishing point detection in image](https://colab.research.google.com/drive/1mtMktfw72-bzQlHUff7q2SWFcMbRokb8?usp=sharing) 
